@@ -20,6 +20,7 @@
               dir = ./.;
               sha256 = "sha256-U2yfueFohJHjif7anmJB5vZbpP7G6bICH4ZsjtufRoU=";
             })
+            pkgs.cargo-run-bin
           ];
         };
       });
