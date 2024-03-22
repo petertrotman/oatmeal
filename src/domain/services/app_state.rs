@@ -276,7 +276,10 @@ impl<'a> AppState<'a> {
 
             if command.is_edit_prompt() {
                 should_continue = true;
-                tx.send(Action::EditPrompt(self.editor_context.clone(), self.messages.clone()))?;
+                tx.send(Action::EditPrompt(
+                    self.editor_context.clone(),
+                    self.messages.clone(),
+                ))?;
                 self.waiting_for_editor = true;
             }
         }
