@@ -48,6 +48,7 @@ pub struct AppState<'a> {
     pub session_id: String,
     pub sessions_service: Sessions,
     pub waiting_for_backend: bool,
+    pub waiting_for_editor: bool,
 }
 
 impl<'a> AppState<'a> {
@@ -76,6 +77,7 @@ impl<'a> AppState<'a> {
             session_id: Sessions::create_id(),
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
+            waiting_for_editor: false,
         };
 
         let backend_name = props.backend.name();
@@ -133,6 +135,7 @@ impl<'a> AppState<'a> {
             session_id,
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
+            waiting_for_editor: false,
         };
 
         app_state
@@ -274,6 +277,7 @@ impl<'a> AppState<'a> {
             if command.is_edit_prompt() {
                 should_continue = true;
                 tx.send(Action::EditPrompt(self.editor_context.clone(), self.messages.clone()))?;
+                self.waiting_for_editor = true;
             }
         }
 
