@@ -100,6 +100,9 @@ pub trait Editor {
         codeblock: String,
         accept_type: AcceptType,
     ) -> Result<()>;
+
+    /// Edit the prompt in the temporary file, then save to update it in Oatmeal
+    async fn edit_prompt(&self, temp_file_path: &std::path::Path) -> Result<()>;
 }
 
 pub type EditorBox = Box<dyn Editor + Send + Sync>;
