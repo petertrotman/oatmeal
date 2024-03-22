@@ -292,6 +292,7 @@ impl ActionsService {
                     });
                 }
                 Action::EditPrompt(_, _) => todo!(),
+                Action::EditPromptAbort() => todo!(),
             }
         }
     }
