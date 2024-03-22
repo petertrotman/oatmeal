@@ -209,6 +209,10 @@ impl<'a> AppState<'a> {
         }
     }
 
+    pub fn abort_edit_prompt(&mut self) {
+        todo!()
+    }
+
     pub fn handle_slash_commands(
         &mut self,
         input_str: &str,

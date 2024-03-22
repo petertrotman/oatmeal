@@ -165,6 +165,9 @@ async fn start_loop<B: Backend>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
+                }
 
                 // Windows submits a null event right after CTRL+C. Ignore it.
                 if input.key != tui_textarea::Key::Null {
@@ -177,7 +180,13 @@ async fn start_loop<B: Backend>(
                 if app_state.waiting_for_backend {
                     app_state.waiting_for_backend = false;
                     tx.send(Action::BackendAbort())?;
-                } else if !app_state.exit_warning {
+                    continue;
+                }
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
+                }
+
+                if !app_state.exit_warning {
                     app_state.add_message(Message::new(
                         Author::Oatmeal,
                         "If you wish to quit, hit CTRL+C one more time, or use /quit",
@@ -191,10 +200,16 @@ async fn start_loop<B: Backend>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
+                }
                 app_state.exit_warning = false;
                 textarea.insert_newline();
             }
             Event::KeyboardCTRLR() => {
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
+                }
                 let last_message = app_state
                     .messages
                     .iter()
@@ -211,6 +226,9 @@ async fn start_loop<B: Backend>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
+                }
                 let input_str = &textarea.lines().join("\n");
                 if input_str.is_empty() {
                     continue;
@@ -220,6 +238,9 @@ async fn start_loop<B: Backend>(
             Event::KeyboardPaste(text) => {
                 if app_state.waiting_for_backend {
                     continue;
+                }
+                if app_state.waiting_for_editor {
+                    app_state.abort_edit_prompt();
                 }
                 app_state.exit_warning = false;
                 textarea.set_yank_text(text.replace('\r', "\n"));
