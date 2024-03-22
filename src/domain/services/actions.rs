@@ -291,6 +291,7 @@ impl ActionsService {
                         return Ok(());
                     });
                 }
+                Action::EditPrompt(_, _) => todo!(),
             }
         }
     }

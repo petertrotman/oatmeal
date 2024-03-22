@@ -270,6 +270,11 @@ impl<'a> AppState<'a> {
             if command.is_model_set() {
                 self.backend_context = "".to_string();
             }
+
+            if command.is_edit_prompt() {
+                should_continue = true;
+                tx.send(Action::EditPrompt(self.editor_context.clone(), self.messages.clone()))?;
+            }
         }
 
         return Ok((should_break, should_continue));
