@@ -55,11 +55,28 @@
         "type": "github"
       }
     },
+    "peternixpkgs": {
+      "locked": {
+        "lastModified": 1711030273,
+        "narHash": "sha256-rJaO3e8pDdNVG5IiuOHWcrZsY3gjOvkOXprQsfzRGZQ=",
+        "owner": "petertrotman",
+        "repo": "nixpkgs",
+        "rev": "958719201eddc72c99a68f1580b6952afd2fd330",
+        "type": "github"
+      },
+      "original": {
+        "owner": "petertrotman",
+        "ref": "Diagon",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "fenix": "fenix",
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "peternixpkgs": "peternixpkgs"
       }
     },
     "rust-analyzer-src": {
