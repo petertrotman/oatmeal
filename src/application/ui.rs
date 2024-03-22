@@ -161,6 +161,10 @@ async fn start_loop<B: Backend>(
                     app_state.save_session().await?;
                 }
             }
+            Event::EditorMessage(msg) => {
+                app_state.add_message(msg);
+                app_state.waiting_for_editor = false;
+            }
             Event::KeyboardCharInput(input) => {
                 if app_state.waiting_for_backend {
                     continue;

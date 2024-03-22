@@ -6,6 +6,7 @@ use super::Message;
 pub enum Event {
     BackendMessage(Message),
     BackendPromptResponse(BackendResponse),
+    EditorMessage(Message),
     KeyboardCharInput(Input),
     KeyboardCTRLC(),
     KeyboardCTRLO(),
