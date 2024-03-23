@@ -1,6 +1,9 @@
+use std::env;
 use std::sync::Arc;
 
 use anyhow::Result;
+use notify::Watcher;
+use tokio::fs;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -157,7 +160,7 @@ async fn accept_codeblock(
             tx.send(Event::BackendMessage(Message::new_with_type(
                 Author::Oatmeal,
                 MessageType::Error,
-                &format!("Failed to commuicate with editor:\n\n{err}"),
+                &format!("Failed to communicate with editor:\n\n{err}"),
             )))?;
         }
     }
@@ -235,6 +238,70 @@ fn help(tx: &mpsc::UnboundedSender<Event>) -> Result<()> {
     return Ok(());
 }
 
+async fn begin_edit_prompt(
+    messages: Vec<Message>,
+    tx: &mpsc::UnboundedSender<Event>,
+) -> Result<JoinHandle<Result<()>>> {
+    let temp_file_path = env::temp_dir().join("oatmeal-prompt");
+    let prompt_delimeter = "\
+        Write your prompt below the line and save to have it updated in Oatmeal\n\
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
+    ";
+    let initial_content = messages
+        .iter()
+        .map(|Message { author, text, .. }| format!("{author}:\n{text}\n\n"))
+        .chain([prompt_delimeter.to_owned()])
+        .collect::<String>();
+    fs::write(&temp_file_path, &initial_content).await?;
+
+    let editor_name = EditorName::parse(Config::get(ConfigKey::Editor)).unwrap();
+    let editor = EditorManager::get(editor_name.clone())?;
+    let res = editor.edit_prompt(&temp_file_path).await;
+    if let Err(err) = res {
+        tx.send(Event::EditorMessage(Message::new_with_type(
+            Author::Oatmeal,
+            MessageType::Error,
+            &format!("Failed to communicate with editor:\n\n{err}"),
+        )))?;
+        return Err(err);
+    }
+
+    let watcher_tx = tx.clone();
+    let mut _content = initial_content.clone();
+    let mut watcher = notify::recommended_watcher(move |res| match res {
+        Ok(event) => handle_notify_event(&event, &initial_content, &watcher_tx),
+        Err(err) => {
+            if let Err(tx_err) = watcher_tx.send(Event::EditorMessage(Message::new_with_type(
+                Author::Oatmeal,
+                MessageType::Error,
+                &format!("file watch error: {err}"),
+            ))) {
+                tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
+            }
+        }
+    })?;
+
+    let worker = tokio::spawn(async move {
+        return watcher
+            .watch(&temp_file_path, notify::RecursiveMode::NonRecursive)
+            .map_err(|err| anyhow::anyhow!("file watch error: {err}"));
+    });
+
+    return Ok(worker);
+}
+
+fn handle_notify_event(
+    event: &notify::Event,
+    _initial_content: &str,
+    _tx: &mpsc::UnboundedSender<Event>,
+) {
+    match event.kind {
+        notify::EventKind::Modify(_) => todo!(),
+        notify::EventKind::Remove(_) => todo!(),
+        _ => (),
+    }
+}
+
 pub struct ActionsService {}
 
 impl ActionsService {
@@ -291,7 +358,12 @@ impl ActionsService {
                         return Ok(());
                     });
                 }
-                Action::EditPrompt(_, _) => todo!(),
+                Action::EditPrompt(messages) => {
+                    match begin_edit_prompt(messages, &tx.clone()).await {
+                        Ok(_) => todo!(),
+                        Err(_) => todo!(),
+                    }
+                }
                 Action::EditPromptAbort() => todo!(),
             }
         }
