@@ -7,6 +7,8 @@ pub enum Event {
     BackendMessage(Message),
     BackendPromptResponse(BackendResponse),
     EditorMessage(Message),
+    EditPromptReplace(String),
+    EditPromptEnd(),
     KeyboardCharInput(Input),
     KeyboardCTRLC(),
     KeyboardCTRLO(),

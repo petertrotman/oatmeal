@@ -30,7 +30,7 @@ use crate::domain::models::Event;
 use crate::domain::models::Loading;
 use crate::domain::models::Message;
 use crate::domain::models::SlashCommand;
-use crate::domain::models::TextArea;
+use crate::domain::models::{apply_defaults, TextArea};
 use crate::domain::services::events::EventsService;
 use crate::domain::services::AppState;
 use crate::domain::services::AppStateProps;
@@ -165,12 +165,23 @@ async fn start_loop<B: Backend>(
                 app_state.add_message(msg);
                 app_state.waiting_for_editor = false;
             }
+            Event::EditPromptReplace(text) => {
+                textarea = tui_textarea::TextArea::from(text.lines());
+                apply_defaults(&mut textarea);
+                tx.send(Action::EditPromptAbort())?;
+                app_state.waiting_for_editor = false;
+            }
+            Event::EditPromptEnd() => {
+                tx.send(Action::EditPromptAbort())?;
+                app_state.waiting_for_editor = false;
+            }
             Event::KeyboardCharInput(input) => {
                 if app_state.waiting_for_backend {
                     continue;
                 }
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
 
                 // Windows submits a null event right after CTRL+C. Ignore it.
@@ -187,7 +198,8 @@ async fn start_loop<B: Backend>(
                     continue;
                 }
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
 
                 if !app_state.exit_warning {
@@ -205,14 +217,16 @@ async fn start_loop<B: Backend>(
                     continue;
                 }
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
                 app_state.exit_warning = false;
                 textarea.insert_newline();
             }
             Event::KeyboardCTRLR() => {
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
                 let last_message = app_state
                     .messages
@@ -231,7 +245,8 @@ async fn start_loop<B: Backend>(
                     continue;
                 }
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
                 let input_str = &textarea.lines().join("\n");
                 if input_str.is_empty() {
@@ -244,7 +259,8 @@ async fn start_loop<B: Backend>(
                     continue;
                 }
                 if app_state.waiting_for_editor {
-                    app_state.abort_edit_prompt();
+                    tx.send(Action::EditPromptAbort())?;
+                    app_state.waiting_for_editor = false;
                 }
                 app_state.exit_warning = false;
                 textarea.set_yank_text(text.replace('\r', "\n"));
