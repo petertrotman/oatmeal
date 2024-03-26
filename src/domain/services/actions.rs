@@ -251,7 +251,7 @@ async fn begin_edit_prompt(
     let initial_content = messages
         .iter()
         .map(|Message { author, text, .. }| format!("{author}:\n{text}\n\n"))
-        .chain([prompt_delimeter.to_owned()])
+        .chain([prompt_delimeter.to_owned(), "\n\n".to_owned()])
         .rev()
         .collect::<String>();
     fs::write(&temp_file_path, &initial_content).await?;
@@ -276,7 +276,7 @@ async fn begin_edit_prompt(
             ..
         }) => match parse_prompt_file(&prompt_file_path, prompt_delimeter) {
             Ok(prompt) => {
-                if let Err(tx_err) = watcher_tx.send(Event::EditPromptReplace(prompt)) {
+                if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd(prompt)) {
                     tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
                 }
             }
@@ -295,7 +295,7 @@ async fn begin_edit_prompt(
             kind: notify::EventKind::Remove(_),
             ..
         }) => {
-            if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd()) {
+            if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd("".to_owned())) {
                 tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
             }
         }
@@ -353,6 +353,10 @@ impl ActionsService {
             return Ok(());
         });
 
+        let mut prompt_worker: JoinHandle<Result<()>> = tokio::spawn(async {
+            return Ok(());
+        });
+
         loop {
             let event = rx.recv().await;
             if event.is_none() {
@@ -395,12 +399,13 @@ impl ActionsService {
                     });
                 }
                 Action::EditPrompt(messages) => {
-                    match begin_edit_prompt(messages, &tx.clone()).await {
-                        Ok(_) => todo!(),
-                        Err(_) => todo!(),
-                    }
+                    prompt_worker = begin_edit_prompt(messages, &tx).await?;
                 }
-                Action::EditPromptAbort() => todo!(),
+                Action::EditPromptAbort() => {
+                    let temp_file_path = env::temp_dir().join("oatmeal-prompt");
+                    let _ = std::fs::remove_file(&temp_file_path);
+                    prompt_worker.abort();
+                }
             }
         }
     }

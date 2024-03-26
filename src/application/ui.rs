@@ -57,7 +57,7 @@ fn is_line_width_sufficient(line_width: u16) -> bool {
     return trimmed_line_width >= min_width;
 }
 
-async fn start_loop<B: Backend>(
+async fn start_loop<B: Backend + std::io::Write>(
     terminal: &mut Terminal<B>,
     app_state_props: AppStateProps,
     tx: mpsc::UnboundedSender<Action>,
@@ -165,13 +165,12 @@ async fn start_loop<B: Backend>(
                 app_state.add_message(msg);
                 app_state.waiting_for_editor = false;
             }
-            Event::EditPromptReplace(text) => {
+            Event::EditPromptBegin() => {
+                start_edit_prompt_loop(terminal).await?;
+            }
+            Event::EditPromptEnd(text) => {
                 textarea = tui_textarea::TextArea::from(text.lines());
                 apply_defaults(&mut textarea);
-                tx.send(Action::EditPromptAbort())?;
-                app_state.waiting_for_editor = false;
-            }
-            Event::EditPromptEnd() => {
                 tx.send(Action::EditPromptAbort())?;
                 app_state.waiting_for_editor = false;
             }
@@ -353,4 +352,25 @@ pub async fn start(
     terminal.show_cursor()?;
 
     return Ok(());
+}
+
+async fn start_edit_prompt_loop<B: Backend + std::io::Write>(terminal: &mut Terminal<B>) -> Result<()> {
+    disable_raw_mode()?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture,
+        DisableBracketedPaste
+    )?;
+    terminal.show_cursor()?;
+
+    loop{}
+
+    enable_raw_mode()?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
 }

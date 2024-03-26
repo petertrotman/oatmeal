@@ -46,9 +46,4 @@ impl Editor for Clipboard {
         ClipboardService::set(codeblock)?;
         return Ok(());
     }
-
-    #[allow(clippy::implicit_return)]
-    async fn edit_prompt(&self, _temp_file_path: &std::path::Path) -> Result<()> {
-        todo!()
-    }
 }

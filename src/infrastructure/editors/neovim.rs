@@ -149,9 +149,4 @@ impl Editor for Neovim {
 
         return Ok(());
     }
-
-    #[allow(clippy::implicit_return)]
-    async fn edit_prompt(&self, _temp_file_path: &std::path::Path) -> Result<()> {
-        todo!()
-    }
 }

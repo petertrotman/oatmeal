@@ -45,9 +45,4 @@ impl Editor for NoopEditor {
             "None/noop editor does not support copying codeblocks. Consider using the 'clipboard' editor instead"
         ));
     }
-
-    #[allow(clippy::implicit_return)]
-    async fn edit_prompt(&self, _temp_file_path: &std::path::Path) -> Result<()> {
-        todo!()
-    }
 }

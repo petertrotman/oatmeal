@@ -5,25 +5,20 @@ Allow user to edit the prompt in the editor. Inspiration from :Gcommit in fugiti
 ```diagon
 User -> UI: /edit<CR>
 User -> UI: <C-e>
-UI -> AppState: waiting_for_editor
 UI -> ActionService: ActionEditPrompt(text)
+UI -> AppState: waiting_for_editor - stop rendering (loop)
 ActionService -> TempFile: Create
 ActionService -> TempFile: Copy Message History + Prompt
-ActionService -> Worker: Spawn
 ActionService -> Neovim: Call lua edit_prompt(tempfile)
 Neovim -> Buffer: Create
 TempFile -> Buffer: Open
 User -> Buffer: Edit prompt
-User -> Buffer: <cmd>w
-Buffer -> TempFile: Save
-TempFile -> Worker: Notify
-Worker -> UI: EventReplacePrompt(text)
-User -> Buffer: <cmd>q
-User -> UI: (anything)
-UI -> AppState: !waiting_for_editor
-UI -> ActionService: ActionEditPromptAbort
+User -> Buffer: Quit
+User -> UI: <Enter>
+UI -> AppState: !waiting_for_editor - restart rendering
+UI -> ActionService: ActionEditPromptEnd
+ActionService -> TempFile: Read prompt
 ActionService -> TempFile: Delete
-TempFile -> Worker: Notify (exit)
 ```
 
  ┌────┐      ┌──┐             ┌────────┐┌─────────────┐                  ┌────────┐     ┌──────┐┌──────┐┌──────┐
