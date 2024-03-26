@@ -1,4 +1,5 @@
 use std::env;
+use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -244,13 +245,14 @@ async fn begin_edit_prompt(
 ) -> Result<JoinHandle<Result<()>>> {
     let temp_file_path = env::temp_dir().join("oatmeal-prompt");
     let prompt_delimeter = "\
-        Write your prompt below the line and save to have it updated in Oatmeal\n\
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
+        Write your prompt above the line and save to have it updated in Oatmeal\n\n\
     ";
     let initial_content = messages
         .iter()
         .map(|Message { author, text, .. }| format!("{author}:\n{text}\n\n"))
         .chain([prompt_delimeter.to_owned()])
+        .rev()
         .collect::<String>();
     fs::write(&temp_file_path, &initial_content).await?;
 
@@ -267,9 +269,37 @@ async fn begin_edit_prompt(
     }
 
     let watcher_tx = tx.clone();
-    let mut _content = initial_content.clone();
+    let prompt_file_path = temp_file_path.clone();
     let mut watcher = notify::recommended_watcher(move |res| match res {
-        Ok(event) => handle_notify_event(&event, &initial_content, &watcher_tx),
+        Ok(notify::Event {
+            kind: notify::EventKind::Modify(_),
+            ..
+        }) => match parse_prompt_file(&prompt_file_path, prompt_delimeter) {
+            Ok(prompt) => {
+                if let Err(tx_err) = watcher_tx.send(Event::EditPromptReplace(prompt)) {
+                    tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
+                }
+            }
+            Err(err) => {
+                if let Err(tx_err) = watcher_tx.send(Event::EditorMessage(Message::new_with_type(
+                    Author::Oatmeal,
+                    MessageType::Error,
+                    &format!("Prompt file parsing error: {err}"),
+                ))) {
+                    tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
+                }
+            }
+        },
+
+        Ok(notify::Event {
+            kind: notify::EventKind::Remove(_),
+            ..
+        }) => {
+            if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd()) {
+                tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
+            }
+        }
+
         Err(err) => {
             if let Err(tx_err) = watcher_tx.send(Event::EditorMessage(Message::new_with_type(
                 Author::Oatmeal,
@@ -279,27 +309,33 @@ async fn begin_edit_prompt(
                 tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
             }
         }
+
+        _ => return,
     })?;
 
     let worker = tokio::spawn(async move {
         return watcher
             .watch(&temp_file_path, notify::RecursiveMode::NonRecursive)
-            .map_err(|err| anyhow::anyhow!("file watch error: {err}"));
+            .map_err(|err| anyhow::anyhow!("File watch error: {err}"));
     });
 
     return Ok(worker);
 }
 
-fn handle_notify_event(
-    event: &notify::Event,
-    _initial_content: &str,
-    _tx: &mpsc::UnboundedSender<Event>,
-) {
-    match event.kind {
-        notify::EventKind::Modify(_) => todo!(),
-        notify::EventKind::Remove(_) => todo!(),
-        _ => (),
-    }
+fn parse_prompt_file(prompt_file_path: &std::path::Path, prompt_delimeter: &str) -> Result<String> {
+    let file = std::fs::File::open(prompt_file_path)?;
+    let reader = BufReader::new(file);
+    let line_delimeter = prompt_delimeter
+        .lines()
+        .next()
+        .ok_or(anyhow::anyhow!("no content in delimeter"))?;
+    let prompt = reader
+        .lines()
+        .map_while(Result::ok)
+        .take_while(|line| return line != line_delimeter)
+        .collect::<String>();
+
+    return Ok(prompt);
 }
 
 pub struct ActionsService {}
