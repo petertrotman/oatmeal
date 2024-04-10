@@ -9,5 +9,4 @@ pub enum Action {
     BackendRequest(BackendPrompt),
     CopyMessages(Vec<Message>),
     EditPromptBegin(Vec<Message>),
-    EditPromptCancel,
 }

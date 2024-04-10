@@ -1,14 +1,15 @@
+use tokio::sync::mpsc::UnboundedSender;
 use tui_textarea::Input;
 
 use super::BackendResponse;
 use super::Message;
 
-pub use crate::domain::services::edit_prompt::Event as EditPromptEvent;
-
 pub enum Event {
     BackendMessage(Message),
     BackendPromptResponse(BackendResponse),
-    EditPrompt(EditPromptEvent),
+    EditPrompt(UnboundedSender<Event>, Vec<Message>),
+    EditPromptMessage(Message),
+    NewPrompt(String),
     KeyboardCharInput(Input),
     KeyboardCTRLC(),
     KeyboardCTRLO(),

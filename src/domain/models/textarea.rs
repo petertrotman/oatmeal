@@ -20,7 +20,7 @@ impl<'a> TextArea {
     }
 }
 
-pub fn apply_defaults(textarea: &mut tui_textarea::TextArea) {
+pub fn style_textarea(textarea: &mut tui_textarea::TextArea) {
     textarea.set_block(
         Block::default()
             .borders(Borders::ALL)

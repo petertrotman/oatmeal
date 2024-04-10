@@ -27,10 +27,10 @@ use crate::domain::models::BackendName;
 use crate::domain::models::BackendPrompt;
 use crate::domain::models::EditorName;
 use crate::domain::models::Event;
+use crate::domain::models::Loading;
 use crate::domain::models::Message;
 use crate::domain::models::SlashCommand;
-use crate::domain::models::TextArea;
-use crate::domain::models::{render_waiting_for_editor, Loading};
+use crate::domain::models::{style_textarea, TextArea};
 use crate::domain::services::events::EventsService;
 use crate::domain::services::AppState;
 use crate::domain::services::AppStateProps;
@@ -113,8 +113,8 @@ async fn start_loop<B: Backend + std::io::Write>(
 
             if app_state.waiting_for_backend {
                 loading.render(frame, layout[1]);
-            } else if app_state.edit_prompt_service.is_active() {
-                render_waiting_for_editor(frame, layout[1]);
+            } else if let Ok(widget) = app_state.edit_prompt_service.widget() {
+                frame.render_widget(widget, layout[1]);
             } else {
                 frame.render_widget(textarea.widget(), layout[1]);
             }
@@ -163,8 +163,21 @@ async fn start_loop<B: Backend + std::io::Write>(
                     app_state.save_session().await?;
                 }
             }
-            Event::EditPrompt(event) => {
-                app_state.edit_prompt_service.handle_event(event).await?;
+            Event::EditPrompt(event_tx, messages) => {
+                // UI Loop blocks here
+                app_state
+                    .edit_prompt_service
+                    .start(&event_tx, &messages)
+                    .await?;
+                // Need to force redraw afterwards
+                terminal.clear()?;
+            }
+            Event::NewPrompt(prompt) => {
+                textarea = tui_textarea::TextArea::from(prompt.lines());
+                style_textarea(&mut textarea);
+            }
+            Event::EditPromptMessage(msg) => {
+                app_state.add_message(msg);
             }
             Event::KeyboardCharInput(input) => {
                 if app_state.waiting_for_backend {
@@ -184,7 +197,7 @@ async fn start_loop<B: Backend + std::io::Write>(
                     continue;
                 }
                 if app_state.edit_prompt_service.is_active() {
-                    tx.send(Action::EditPromptCancel)?;
+                    app_state.edit_prompt_service.cancel()?;
                     continue;
                 }
                 if !app_state.exit_warning {
@@ -222,7 +235,7 @@ async fn start_loop<B: Backend + std::io::Write>(
                     continue;
                 }
                 if app_state.edit_prompt_service.is_active() {
-                    tx.send(Action::EditPromptCancel)?;
+                    app_state.edit_prompt_service.finish()?;
                     continue;
                 }
                 let input_str = &textarea.lines().join("\n");

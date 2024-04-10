@@ -14,10 +14,10 @@ use crate::domain::models::BackendBox;
 use crate::domain::models::BackendPrompt;
 use crate::domain::models::EditorContext;
 use crate::domain::models::EditorName;
+use crate::domain::models::Event;
 use crate::domain::models::Message;
 use crate::domain::models::MessageType;
 use crate::domain::models::SlashCommand;
-use crate::domain::models::{EditPromptEvent, Event};
 use crate::infrastructure::editors::EditorManager;
 
 pub fn help_text() -> String {
@@ -292,13 +292,7 @@ impl ActionsService {
                     });
                 }
                 Action::EditPromptBegin(messages) => {
-                    tx.send(Event::EditPrompt(EditPromptEvent::Begin(
-                        tx.clone(),
-                        messages,
-                    )))?;
-                }
-                Action::EditPromptCancel => {
-                    tx.send(Event::EditPrompt(EditPromptEvent::Cancel))?;
+                    tx.send(Event::EditPrompt(tx.clone(), messages))?;
                 }
             }
         }
