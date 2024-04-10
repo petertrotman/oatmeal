@@ -8,6 +8,6 @@ pub enum Action {
     BackendAbort(),
     BackendRequest(BackendPrompt),
     CopyMessages(Vec<Message>),
-    EditPrompt(Vec<Message>),
-    EditPromptAbort(),
+    EditPromptBegin(Vec<Message>),
+    EditPromptCancel,
 }

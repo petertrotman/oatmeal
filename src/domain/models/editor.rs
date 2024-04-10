@@ -101,15 +101,18 @@ pub trait Editor {
         accept_type: AcceptType,
     ) -> Result<()>;
 
-    /// Edit the prompt in the temporary file, then save to update it in Oatmeal
-    /// Default implementation: use the $EDITOR environment variable
+    /// Opens the prompt in the editor.
+    /// Default implementation:
+    ///     - Uses the $EDITOR environment variable to get the executable and launches that in a
+    ///     new process.
+    ///     - Blocks the thread.
     #[allow(clippy::implicit_return)]
     async fn edit_prompt(&self, temp_file_path: &std::path::Path) -> Result<()> {
         let editor = std::env::var("EDITOR")?;
         let _status = std::process::Command::new(editor)
             .arg(temp_file_path)
-            .spawn()?
-            .wait()?;
+            // Blocking method
+            .status()?;
         return Ok(());
     }
 }

@@ -27,10 +27,10 @@ use crate::domain::models::BackendName;
 use crate::domain::models::BackendPrompt;
 use crate::domain::models::EditorName;
 use crate::domain::models::Event;
-use crate::domain::models::Loading;
 use crate::domain::models::Message;
 use crate::domain::models::SlashCommand;
-use crate::domain::models::{apply_defaults, TextArea};
+use crate::domain::models::TextArea;
+use crate::domain::models::{render_waiting_for_editor, Loading};
 use crate::domain::services::events::EventsService;
 use crate::domain::services::AppState;
 use crate::domain::services::AppStateProps;
@@ -113,6 +113,8 @@ async fn start_loop<B: Backend + std::io::Write>(
 
             if app_state.waiting_for_backend {
                 loading.render(frame, layout[1]);
+            } else if app_state.edit_prompt_service.is_active() {
+                render_waiting_for_editor(frame, layout[1]);
             } else {
                 frame.render_widget(textarea.widget(), layout[1]);
             }
@@ -161,28 +163,13 @@ async fn start_loop<B: Backend + std::io::Write>(
                     app_state.save_session().await?;
                 }
             }
-            Event::EditorMessage(msg) => {
-                app_state.add_message(msg);
-                app_state.waiting_for_editor = false;
-            }
-            Event::EditPromptBegin() => {
-                start_edit_prompt_loop(terminal).await?;
-            }
-            Event::EditPromptEnd(text) => {
-                textarea = tui_textarea::TextArea::from(text.lines());
-                apply_defaults(&mut textarea);
-                tx.send(Action::EditPromptAbort())?;
-                app_state.waiting_for_editor = false;
+            Event::EditPrompt(event) => {
+                app_state.edit_prompt_service.handle_event(event).await?;
             }
             Event::KeyboardCharInput(input) => {
                 if app_state.waiting_for_backend {
                     continue;
                 }
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
-                }
-
                 // Windows submits a null event right after CTRL+C. Ignore it.
                 if input.key != tui_textarea::Key::Null {
                     app_state.exit_warning = false;
@@ -196,11 +183,10 @@ async fn start_loop<B: Backend + std::io::Write>(
                     tx.send(Action::BackendAbort())?;
                     continue;
                 }
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
+                if app_state.edit_prompt_service.is_active() {
+                    tx.send(Action::EditPromptCancel)?;
+                    continue;
                 }
-
                 if !app_state.exit_warning {
                     app_state.add_message(Message::new(
                         Author::Oatmeal,
@@ -215,18 +201,10 @@ async fn start_loop<B: Backend + std::io::Write>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
-                }
                 app_state.exit_warning = false;
                 textarea.insert_newline();
             }
             Event::KeyboardCTRLR() => {
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
-                }
                 let last_message = app_state
                     .messages
                     .iter()
@@ -243,9 +221,9 @@ async fn start_loop<B: Backend + std::io::Write>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
+                if app_state.edit_prompt_service.is_active() {
+                    tx.send(Action::EditPromptCancel)?;
+                    continue;
                 }
                 let input_str = &textarea.lines().join("\n");
                 if input_str.is_empty() {
@@ -256,10 +234,6 @@ async fn start_loop<B: Backend + std::io::Write>(
             Event::KeyboardPaste(text) => {
                 if app_state.waiting_for_backend {
                     continue;
-                }
-                if app_state.waiting_for_editor {
-                    tx.send(Action::EditPromptAbort())?;
-                    app_state.waiting_for_editor = false;
                 }
                 app_state.exit_warning = false;
                 textarea.set_yank_text(text.replace('\r', "\n"));
@@ -352,25 +326,4 @@ pub async fn start(
     terminal.show_cursor()?;
 
     return Ok(());
-}
-
-async fn start_edit_prompt_loop<B: Backend + std::io::Write>(terminal: &mut Terminal<B>) -> Result<()> {
-    disable_raw_mode()?;
-    crossterm::execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture,
-        DisableBracketedPaste
-    )?;
-    terminal.show_cursor()?;
-
-    loop{}
-
-    enable_raw_mode()?;
-    crossterm::execute!(
-        terminal.backend_mut(),
-        EnterAlternateScreen,
-        EnableMouseCapture,
-        EnableBracketedPaste
-    )?;
 }

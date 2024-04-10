@@ -25,3 +25,17 @@ impl Loading {
         );
     }
 }
+
+pub fn render_waiting_for_editor(frame: &mut Frame, rect: Rect) {
+    frame.render_widget(
+        Paragraph::new("Waiting for editor, press Enter to continue.")
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Double)
+                    .padding(Padding::new(1, 1, 0, 0)),
+            )
+            .alignment(Alignment::Center),
+        rect,
+    );
+}

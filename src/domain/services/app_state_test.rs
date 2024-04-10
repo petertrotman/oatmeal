@@ -16,6 +16,7 @@ use crate::domain::models::MessageType;
 use crate::domain::services::AppStateProps;
 use crate::domain::services::BubbleList;
 use crate::domain::services::CodeBlocks;
+use crate::domain::services::EditPromptService;
 use crate::domain::services::Scroll;
 use crate::domain::services::Sessions;
 use crate::domain::services::Themes;
@@ -38,7 +39,7 @@ impl Default for AppState<'static> {
             scroll: Scroll::default(),
             sessions_service: Sessions::default(),
             waiting_for_backend: false,
-            waiting_for_editor: false,
+            edit_prompt_service: EditPromptService::default(),
         };
     }
 }

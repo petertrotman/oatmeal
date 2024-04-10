@@ -1,10 +1,6 @@
-use std::env;
-use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 
 use anyhow::Result;
-use notify::Watcher;
-use tokio::fs;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -18,10 +14,10 @@ use crate::domain::models::BackendBox;
 use crate::domain::models::BackendPrompt;
 use crate::domain::models::EditorContext;
 use crate::domain::models::EditorName;
-use crate::domain::models::Event;
 use crate::domain::models::Message;
 use crate::domain::models::MessageType;
 use crate::domain::models::SlashCommand;
+use crate::domain::models::{EditPromptEvent, Event};
 use crate::infrastructure::editors::EditorManager;
 
 pub fn help_text() -> String {
@@ -52,7 +48,7 @@ When working with models that provide code, and using an editor integration, Oat
 - /replace (/r) [CODE_BLOCK_NUMBER?] - will replace selected code in your editor with one-to-many model provided code blocks.
 - /copy (/c) [CODE_BLOCK_NUMBER?] - Copies the entire chat history to your clipboard. When a `CODE_BLOCK_NUMBER` is used it will append one-to-many model provided code blocks to your clipboard, no matter the editor integration.
 
-The `CODE_BLOCK_NUMBER` allows you to select several code blocks to send back to your editor at once. The parameter can be set as follows:
+The `CODE_BLOCK_NUMBER` allos you to select several code blocks to send back to your editor at once. The parameter can be set as follows:
 - `1` - Selects the first code block
 - `1,3,5` - Selects code blocks 1, 3, and 5.
 - `2..5`- Selects an inclusive range of code blocks between 2 and 5.
@@ -239,105 +235,6 @@ fn help(tx: &mpsc::UnboundedSender<Event>) -> Result<()> {
     return Ok(());
 }
 
-async fn begin_edit_prompt(
-    messages: Vec<Message>,
-    tx: &mpsc::UnboundedSender<Event>,
-) -> Result<JoinHandle<Result<()>>> {
-    let temp_file_path = env::temp_dir().join("oatmeal-prompt");
-    let prompt_delimeter = "\
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
-        Write your prompt above the line and save to have it updated in Oatmeal\n\n\
-    ";
-    let initial_content = messages
-        .iter()
-        .map(|Message { author, text, .. }| format!("{author}:\n{text}\n\n"))
-        .chain([prompt_delimeter.to_owned(), "\n\n".to_owned()])
-        .rev()
-        .collect::<String>();
-    fs::write(&temp_file_path, &initial_content).await?;
-
-    let editor_name = EditorName::parse(Config::get(ConfigKey::Editor)).unwrap();
-    let editor = EditorManager::get(editor_name.clone())?;
-    let res = editor.edit_prompt(&temp_file_path).await;
-    if let Err(err) = res {
-        tx.send(Event::EditorMessage(Message::new_with_type(
-            Author::Oatmeal,
-            MessageType::Error,
-            &format!("Failed to communicate with editor:\n\n{err}"),
-        )))?;
-        return Err(err);
-    }
-
-    let watcher_tx = tx.clone();
-    let prompt_file_path = temp_file_path.clone();
-    let mut watcher = notify::recommended_watcher(move |res| match res {
-        Ok(notify::Event {
-            kind: notify::EventKind::Modify(_),
-            ..
-        }) => match parse_prompt_file(&prompt_file_path, prompt_delimeter) {
-            Ok(prompt) => {
-                if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd(prompt)) {
-                    tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
-                }
-            }
-            Err(err) => {
-                if let Err(tx_err) = watcher_tx.send(Event::EditorMessage(Message::new_with_type(
-                    Author::Oatmeal,
-                    MessageType::Error,
-                    &format!("Prompt file parsing error: {err}"),
-                ))) {
-                    tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
-                }
-            }
-        },
-
-        Ok(notify::Event {
-            kind: notify::EventKind::Remove(_),
-            ..
-        }) => {
-            if let Err(tx_err) = watcher_tx.send(Event::EditPromptEnd("".to_owned())) {
-                tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
-            }
-        }
-
-        Err(err) => {
-            if let Err(tx_err) = watcher_tx.send(Event::EditorMessage(Message::new_with_type(
-                Author::Oatmeal,
-                MessageType::Error,
-                &format!("file watch error: {err}"),
-            ))) {
-                tracing::event!(tracing::Level::ERROR, "tx error: {tx_err}");
-            }
-        }
-
-        _ => return,
-    })?;
-
-    let worker = tokio::spawn(async move {
-        return watcher
-            .watch(&temp_file_path, notify::RecursiveMode::NonRecursive)
-            .map_err(|err| anyhow::anyhow!("File watch error: {err}"));
-    });
-
-    return Ok(worker);
-}
-
-fn parse_prompt_file(prompt_file_path: &std::path::Path, prompt_delimeter: &str) -> Result<String> {
-    let file = std::fs::File::open(prompt_file_path)?;
-    let reader = BufReader::new(file);
-    let line_delimeter = prompt_delimeter
-        .lines()
-        .next()
-        .ok_or(anyhow::anyhow!("no content in delimeter"))?;
-    let prompt = reader
-        .lines()
-        .map_while(Result::ok)
-        .take_while(|line| return line != line_delimeter)
-        .collect::<String>();
-
-    return Ok(prompt);
-}
-
 pub struct ActionsService {}
 
 impl ActionsService {
@@ -350,10 +247,6 @@ impl ActionsService {
 
         // Lazy default.
         let mut worker: JoinHandle<Result<()>> = tokio::spawn(async {
-            return Ok(());
-        });
-
-        let mut prompt_worker: JoinHandle<Result<()>> = tokio::spawn(async {
             return Ok(());
         });
 
@@ -398,13 +291,14 @@ impl ActionsService {
                         return Ok(());
                     });
                 }
-                Action::EditPrompt(messages) => {
-                    prompt_worker = begin_edit_prompt(messages, &tx).await?;
+                Action::EditPromptBegin(messages) => {
+                    tx.send(Event::EditPrompt(EditPromptEvent::Begin(
+                        tx.clone(),
+                        messages,
+                    )))?;
                 }
-                Action::EditPromptAbort() => {
-                    let temp_file_path = env::temp_dir().join("oatmeal-prompt");
-                    let _ = std::fs::remove_file(&temp_file_path);
-                    prompt_worker.abort();
+                Action::EditPromptCancel => {
+                    tx.send(Event::EditPrompt(EditPromptEvent::Cancel))?;
                 }
             }
         }

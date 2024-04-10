@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 
 use super::BubbleList;
 use super::CodeBlocks;
+use super::EditPromptService;
 use super::Scroll;
 use super::Sessions;
 use super::Themes;
@@ -48,7 +49,7 @@ pub struct AppState<'a> {
     pub session_id: String,
     pub sessions_service: Sessions,
     pub waiting_for_backend: bool,
-    pub waiting_for_editor: bool,
+    pub edit_prompt_service: EditPromptService,
 }
 
 impl<'a> AppState<'a> {
@@ -77,7 +78,7 @@ impl<'a> AppState<'a> {
             session_id: Sessions::create_id(),
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
-            waiting_for_editor: false,
+            edit_prompt_service: EditPromptService::default(),
         };
 
         let backend_name = props.backend.name();
@@ -135,7 +136,7 @@ impl<'a> AppState<'a> {
             session_id,
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
-            waiting_for_editor: false,
+            edit_prompt_service: EditPromptService::default(),
         };
 
         app_state
@@ -275,9 +276,8 @@ impl<'a> AppState<'a> {
             }
 
             if command.is_edit_prompt() {
+                tx.send(Action::EditPromptBegin(self.messages.clone()))?;
                 should_continue = true;
-                tx.send(Action::EditPrompt(self.messages.clone()))?;
-                self.waiting_for_editor = true;
             }
         }
 
