@@ -7,11 +7,12 @@ use super::Message;
 pub enum Event {
     BackendMessage(Message),
     BackendPromptResponse(BackendResponse),
-    EditPrompt(UnboundedSender<Event>, Vec<Message>),
+    EditPrompt(UnboundedSender<Event>),
     EditPromptMessage(Message),
     NewPrompt(String),
     KeyboardCharInput(Input),
     KeyboardCTRLC(),
+    KeyboardCTRLE(),
     KeyboardCTRLO(),
     KeyboardCTRLR(),
     KeyboardEnter(),

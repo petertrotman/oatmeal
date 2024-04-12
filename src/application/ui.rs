@@ -30,7 +30,8 @@ use crate::domain::models::Event;
 use crate::domain::models::Loading;
 use crate::domain::models::Message;
 use crate::domain::models::SlashCommand;
-use crate::domain::models::{style_textarea, TextArea};
+use crate::domain::models::TextArea;
+use crate::domain::services::edit_prompt;
 use crate::domain::services::events::EventsService;
 use crate::domain::services::AppState;
 use crate::domain::services::AppStateProps;
@@ -113,8 +114,8 @@ async fn start_loop<B: Backend + std::io::Write>(
 
             if app_state.waiting_for_backend {
                 loading.render(frame, layout[1]);
-            } else if let Ok(widget) = app_state.edit_prompt_service.widget() {
-                frame.render_widget(widget, layout[1]);
+            } else if let Some(service) = &app_state.edit_prompt_service {
+                frame.render_widget(service.widget(), layout[1]);
             } else {
                 frame.render_widget(textarea.widget(), layout[1]);
             }
@@ -163,21 +164,30 @@ async fn start_loop<B: Backend + std::io::Write>(
                     app_state.save_session().await?;
                 }
             }
-            Event::EditPrompt(event_tx, messages) => {
+            Event::EditPromptMessage(msg) => {
+                app_state.add_message(msg);
+            }
+            Event::EditPrompt(event_tx) => {
                 // UI Loop blocks here
-                app_state
-                    .edit_prompt_service
-                    .start(&event_tx, &messages)
-                    .await?;
+                let opt_service = edit_prompt::ActiveService::build()
+                    .event_tx(&event_tx)
+                    .prompt(&textarea.lines().join("\n"))
+                    .messages(&app_state.messages)
+                    .start()
+                    .await;
+                app_state.edit_prompt_service = opt_service;
                 // Need to force redraw afterwards
                 terminal.clear()?;
             }
             Event::NewPrompt(prompt) => {
-                textarea = tui_textarea::TextArea::from(prompt.lines());
-                style_textarea(&mut textarea);
-            }
-            Event::EditPromptMessage(msg) => {
-                app_state.add_message(msg);
+                let mut new_textarea = tui_textarea::TextArea::from(prompt.lines());
+                new_textarea.set_style(textarea.style());
+                if let Some(block) = textarea.block() {
+                    new_textarea.set_block(block.clone());
+                }
+                textarea = new_textarea;
+                textarea.move_cursor(tui_textarea::CursorMove::Bottom);
+                textarea.move_cursor(tui_textarea::CursorMove::End);
             }
             Event::KeyboardCharInput(input) => {
                 if app_state.waiting_for_backend {
@@ -196,8 +206,8 @@ async fn start_loop<B: Backend + std::io::Write>(
                     tx.send(Action::BackendAbort())?;
                     continue;
                 }
-                if app_state.edit_prompt_service.is_active() {
-                    app_state.edit_prompt_service.cancel()?;
+                if app_state.edit_prompt_service.is_some() {
+                    app_state.edit_prompt_service = None;
                     continue;
                 }
                 if !app_state.exit_warning {
@@ -209,6 +219,12 @@ async fn start_loop<B: Backend + std::io::Write>(
                 } else {
                     break;
                 }
+            }
+            Event::KeyboardCTRLE() => {
+                if app_state.edit_prompt_service.is_some() {
+                    continue;
+                }
+                tx.send(Action::EditPromptBegin())?;
             }
             Event::KeyboardCTRLO() => {
                 if app_state.waiting_for_backend {
@@ -234,8 +250,8 @@ async fn start_loop<B: Backend + std::io::Write>(
                 if app_state.waiting_for_backend {
                     continue;
                 }
-                if app_state.edit_prompt_service.is_active() {
-                    app_state.edit_prompt_service.finish()?;
+                if let Some(service) = app_state.edit_prompt_service {
+                    app_state.edit_prompt_service = service.finish();
                     continue;
                 }
                 let input_str = &textarea.lines().join("\n");

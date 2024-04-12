@@ -291,8 +291,8 @@ impl ActionsService {
                         return Ok(());
                     });
                 }
-                Action::EditPromptBegin(messages) => {
-                    tx.send(Event::EditPrompt(tx.clone(), messages))?;
+                Action::EditPromptBegin() => {
+                    tx.send(Event::EditPrompt(tx.clone()))?;
                 }
             }
         }

@@ -19,13 +19,3 @@ impl<'a> TextArea {
         return textarea;
     }
 }
-
-pub fn style_textarea(textarea: &mut tui_textarea::TextArea) {
-    textarea.set_block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Double)
-            .title("Enter prompt")
-            .padding(Padding::new(1, 1, 0, 0)),
-    );
-}

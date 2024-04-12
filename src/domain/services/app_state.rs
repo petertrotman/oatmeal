@@ -3,9 +3,9 @@ use anyhow::Result;
 use ratatui::prelude::Rect;
 use tokio::sync::mpsc;
 
+use super::edit_prompt;
 use super::BubbleList;
 use super::CodeBlocks;
-use super::EditPromptService;
 use super::Scroll;
 use super::Sessions;
 use super::Themes;
@@ -49,7 +49,7 @@ pub struct AppState<'a> {
     pub session_id: String,
     pub sessions_service: Sessions,
     pub waiting_for_backend: bool,
-    pub edit_prompt_service: EditPromptService,
+    pub edit_prompt_service: Option<edit_prompt::ActiveService>,
 }
 
 impl<'a> AppState<'a> {
@@ -78,7 +78,7 @@ impl<'a> AppState<'a> {
             session_id: Sessions::create_id(),
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
-            edit_prompt_service: EditPromptService::default(),
+            edit_prompt_service: None,
         };
 
         let backend_name = props.backend.name();
@@ -136,7 +136,7 @@ impl<'a> AppState<'a> {
             session_id,
             sessions_service: props.sessions_service,
             waiting_for_backend: false,
-            edit_prompt_service: EditPromptService::default(),
+            edit_prompt_service: None,
         };
 
         app_state
@@ -276,7 +276,7 @@ impl<'a> AppState<'a> {
             }
 
             if command.is_edit_prompt() {
-                tx.send(Action::EditPromptBegin(self.messages.clone()))?;
+                tx.send(Action::EditPromptBegin())?;
                 should_continue = true;
             }
         }

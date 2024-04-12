@@ -15,7 +15,6 @@ pub use app_state::*;
 pub use bubble::*;
 pub use bubble_list::*;
 pub use code_blocks::*;
-pub use edit_prompt::Service as EditPromptService;
 pub use scroll::*;
 pub use sessions::*;
 pub use syntaxes::*;
